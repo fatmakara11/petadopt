@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { useUser } from '@clerk/clerk-react';
+import { doc, getDoc, collection, query, where, getDocs, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import Colors from '../colors';
 import FavoriteButton from '../components/FavoriteButton';
@@ -8,8 +9,10 @@ import FavoriteButton from '../components/FavoriteButton';
 const PetDetails = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { user } = useUser();
     const [pet, setPet] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [chatLoading, setChatLoading] = useState(false);
     const [error, setError] = useState(null);
     const [readMore, setReadMore] = useState(false);
 
@@ -47,6 +50,145 @@ const PetDetails = () => {
             fetchPetDetails();
         }
     }, [id]);
+
+    // İki kullanıcı arasında sohbet başlatmak için kullanıldı (mobil uygulamadan adapte edildi)
+    const initiateChat = async () => {
+        try {
+            setChatLoading(true);
+            console.log("Sohbet başlatılıyor...");
+            console.log("Kullanıcı:", user?.emailAddresses?.[0]?.emailAddress);
+            console.log("Pet sahibi:", pet?.useremail);
+
+            // Email bilgilerini kontrol et
+            if (!user?.emailAddresses?.[0]?.emailAddress) {
+                alert("Sohbet başlatmak için giriş yapmalısınız");
+                setChatLoading(false);
+                return;
+            }
+
+            // Pet sahibinin email'ini al (useremail field'i kullan)
+            const petOwnerEmail = pet?.useremail || pet?.email;
+
+            if (!petOwnerEmail) {
+                alert("Pet sahibi bilgileri bulunamadı");
+                setChatLoading(false);
+                return;
+            }
+
+            console.log("Kullanılan pet sahibi email:", petOwnerEmail);
+            console.log("Mevcut kullanıcı email:", user.emailAddresses[0].emailAddress);
+
+            // Kendi pet'inle sohbet etmeye çalışma kontrolü
+            if (user.emailAddresses[0].emailAddress === petOwnerEmail) {
+                alert("Kendi pet'inizle sohbet edemezsiniz");
+                setChatLoading(false);
+                return;
+            }
+
+            // Benzersiz sohbet ID'si oluştur - emails alfabetik sıraya koy
+            const sortedEmails = [user.emailAddresses[0].emailAddress, petOwnerEmail].sort();
+            const chatId = sortedEmails.join('_');
+
+            // Kullanıcı ID'leri array'i
+            const userIds = [
+                user.emailAddresses[0].emailAddress,
+                petOwnerEmail
+            ];
+
+            console.log("Chat ID:", chatId);
+            console.log("User IDs:", userIds);
+
+            // Firebase'de mevcut sohbeti kontrol et - daha güvenli yöntem
+            const chatQuery = query(
+                collection(db, 'Chat'),
+                where('userIds', 'array-contains', user.emailAddresses[0].emailAddress)
+            );
+            const querySnapshot = await getDocs(chatQuery);
+
+            // Aynı iki kullanıcı arasında sohbet var mı kontrol et
+            let existingChatId = null;
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                if (data.userIds &&
+                    data.userIds.includes(user.emailAddresses[0].emailAddress) &&
+                    data.userIds.includes(petOwnerEmail)) {
+                    existingChatId = doc.id;
+                }
+            });
+
+            // Mevcut sohbet varsa, ona yönlendir
+            if (existingChatId) {
+                console.log("Mevcut sohbet bulundu:", existingChatId);
+                navigate('/inbox');
+                setChatLoading(false);
+                return;
+            }
+
+            // Yeni sohbet oluştur
+            console.log("Yeni sohbet oluşturuluyor...");
+
+            // İsim bilgilerini daha akıllı şekilde al
+            const currentUserName = user?.firstName && user?.lastName
+                ? `${user.firstName} ${user.lastName}`
+                : user?.firstName ||
+                user?.username ||
+                user?.emailAddresses?.[0]?.emailAddress?.split('@')[0] ||
+                'Kullanıcı';
+
+            const petOwnerName = pet?.userName ||
+                pet?.ownerName ||
+                petOwnerEmail?.split('@')[0] ||
+                'Pet Sahibi';
+
+            console.log("🏷️ Kullanıcı adları:");
+            console.log("Current user name:", currentUserName);
+            console.log("Pet owner name:", petOwnerName);
+
+            const chatData = {
+                id: chatId,
+                userIds: userIds,
+                users: [
+                    {
+                        email: user.emailAddresses[0].emailAddress,
+                        imageUrl: user?.imageUrl || '',
+                        name: currentUserName,
+                        role: 'adopter'
+                    },
+                    {
+                        email: petOwnerEmail,
+                        imageUrl: pet?.userImage || '',
+                        name: petOwnerName,
+                        petId: pet?.id || '',
+                        petName: pet?.name || '',
+                        role: 'owner'
+                    }
+                ],
+                petDetails: {
+                    id: pet?.id || '',
+                    name: pet?.name || '',
+                    image: pet?.imageUrl || pet?.image || '',
+                    breed: pet?.breed || ''
+                },
+                createdAt: new Date(),
+                lastMessage: null,
+                lastMessageTime: new Date()
+            };
+
+            console.log("Oluşturulacak chat data:", chatData);
+
+            await setDoc(doc(db, 'Chat', chatId), chatData);
+
+            console.log("Sohbet başarıyla oluşturuldu!");
+
+            // Inbox'a yönlendir
+            navigate('/inbox');
+        } catch (error) {
+            console.error("Sohbet başlatma hatası:", error);
+            alert("Sohbet başlatılırken bir hata oluştu: " + error.message);
+        } finally {
+            setChatLoading(false);
+        }
+    };
 
     if (loading) {
         return <div className="loading">Yükleniyor...</div>;
@@ -309,7 +451,7 @@ const PetDetails = () => {
                 </div>
             </div>
 
-            {/* Adopt Me (veya Contact) butonu - sabit alt kısımda */}
+            {/* Adopt Me butonları - sabit alt kısımda */}
             <div style={{
                 position: 'fixed',
                 bottom: 0,
@@ -337,20 +479,52 @@ const PetDetails = () => {
                 }}>
                     Contact
                 </button>
-                <button style={{
-                    flex: 1,
-                    padding: '15px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    backgroundColor: Colors.PRIMARY,
-                    color: 'white',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    fontSize: '16px'
-                }}>
-                    Adopt Me
+                <button
+                    onClick={initiateChat}
+                    disabled={chatLoading}
+                    style={{
+                        flex: 1,
+                        padding: '15px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        backgroundColor: chatLoading ? '#ccc' : Colors.PRIMARY,
+                        color: 'white',
+                        fontWeight: '600',
+                        cursor: chatLoading ? 'not-allowed' : 'pointer',
+                        fontSize: '16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px'
+                    }}
+                >
+                    {chatLoading ? (
+                        <>
+                            <div style={{
+                                width: '16px',
+                                height: '16px',
+                                border: '2px solid #ffffff',
+                                borderTop: '2px solid transparent',
+                                borderRadius: '50%',
+                                animation: 'spin 1s linear infinite'
+                            }}></div>
+                            Starting Chat...
+                        </>
+                    ) : (
+                        'Adopt Me'
+                    )}
                 </button>
             </div>
+
+            {/* CSS Animation for loading spinner */}
+            <style>
+                {`
+                    @keyframes spin {
+                        0% { transform: rotate(0deg); }
+                        100% { transform: rotate(360deg); }
+                    }
+                `}
+            </style>
 
             {/* Extra space to allow scrolling past fixed bottom button */}
             <div style={{ height: '80px' }}></div>

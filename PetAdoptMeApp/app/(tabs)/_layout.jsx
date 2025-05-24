@@ -63,6 +63,18 @@ export default function TabsLayout() {
                     ),
                 }}
             />
+
+            <Tabs.Screen
+                name="care"
+                options={{
+                    title: "Bakım",
+                    headerShown: false,
+                    tabBarIcon: ({ color, size }) => (
+                        <Ionicons name="medical" size={size} color={color} />
+                    ),
+                }}
+            />
+
             <Tabs.Screen
                 name="favorite"
                 options={{

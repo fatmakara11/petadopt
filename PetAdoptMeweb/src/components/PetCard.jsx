@@ -28,7 +28,7 @@ const PetCard = ({ pet }) => {
                     fontSize: '11px'
                 }}>{pet?.age}YRS</span>
             </div>
-            <Link to={`/pet/${pet?.id}`} className="details-link">View Details</Link>
+            <Link to={`/pet-details/${pet?.id}`} className="details-link">View Details</Link>
         </div>
     );
 };

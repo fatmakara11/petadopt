@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import Shared from '../../Shared/Shared';
 
-export default function MarkFav({ pet ,color='black'}) {
+export default function MarkFav({ pet, color = 'black' }) {
     const { user } = useUser();
     const [favList, setFavList] = useState([]);
 

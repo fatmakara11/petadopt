@@ -5,6 +5,7 @@ import { collection, getDocs, addDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import Colors from '../colors';
+import VisionPetAnalyzer from './VisionPetAnalyzer';
 
 // Mobil uygulamadaki add-new-pet sayfasına benzer bir form
 const AddPetForm = () => {
@@ -16,6 +17,7 @@ const AddPetForm = () => {
     const [imagePreview, setImagePreview] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState(null);
+    const [aiStatus, setAiStatus] = useState(null);
 
     useEffect(() => {
         if (isLoaded && !user) {
@@ -55,6 +57,24 @@ const AddPetForm = () => {
             setImage(selectedFile);
             setImagePreview(URL.createObjectURL(selectedFile));
         }
+    };
+
+    // AI analiz sonuçlarını işleyen fonksiyon
+    const handleAIAnalysisComplete = (aiFormData) => {
+        console.log('🎯 AI Analiz sonucu alındı:', aiFormData);
+
+        setFormData(prev => ({
+            ...prev,
+            ...aiFormData
+        }));
+
+        // AI durumunu güncelle
+        setAiStatus({
+            success: true,
+            breed: aiFormData.breed,
+            confidence: aiFormData.confidence,
+            timestamp: new Date().toLocaleTimeString('tr-TR')
+        });
     };
 
     const generateRandomId = (length = 16) => {
@@ -121,7 +141,10 @@ const AddPetForm = () => {
                         : (user.firstName || user.lastName || user.username || user.primaryEmailAddress?.emailAddress || 'Unknown'),
                 useremail: user.primaryEmailAddress?.emailAddress,
                 weight: formData.weight,
-                createdAt: new Date()
+                createdAt: new Date(),
+                // AI analysis data
+                aiAnalysis: formData.aiAnalysis || null,
+                confidence: formData.confidence || null
             });
 
             alert('Pet added successfully!');
@@ -200,25 +223,25 @@ const AddPetForm = () => {
                                                 width: '300px',
                                                 height: '300px',
                                                 objectFit: 'cover',
-                                                borderRadius: '12px',
-                                                boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                                                borderRadius: '15px',
+                                                border: `3px solid ${Colors.PRIMARY}`
                                             }}
                                         />
                                     ) : (
-                                        <div className="placeholder-image" style={{
+                                        <div style={{
                                             width: '300px',
                                             height: '300px',
-                                            backgroundColor: '#f5f5f5',
-                                            borderRadius: '12px',
+                                            backgroundColor: '#f8f9fa',
+                                            borderRadius: '15px',
+                                            border: '2px dashed #ddd',
                                             display: 'flex',
                                             flexDirection: 'column',
-                                            justifyContent: 'center',
                                             alignItems: 'center',
-                                            color: Colors.GRAY,
-                                            border: '2px dashed #ddd'
+                                            justifyContent: 'center',
+                                            color: '#666'
                                         }}>
-                                            <div style={{ fontSize: '48px', marginBottom: '10px' }}>🖼️</div>
-                                            <div style={{ fontSize: '18px' }}>Add Pet Photo</div>
+                                            <div style={{ fontSize: '60px', marginBottom: '10px' }}>🐾</div>
+                                            <p>Click to add photo</p>
                                         </div>
                                     )}
                                 </label>
@@ -229,184 +252,259 @@ const AddPetForm = () => {
                                     onChange={handleImageChange}
                                     style={{ display: 'none' }}
                                 />
-                                <button
-                                    type="button"
-                                    onClick={() => document.getElementById('image-input').click()}
-                                    style={{
-                                        backgroundColor: Colors.LIGHT_PRIMARY,
-                                        color: Colors.PRIMARY,
-                                        border: 'none',
-                                        padding: '10px 20px',
-                                        borderRadius: '8px',
-                                        fontWeight: '500',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    {imagePreview ? 'Change Photo' : 'Upload Photo'}
-                                </button>
+                                <p style={{ color: Colors.PRIMARY, fontSize: '14px', textAlign: 'center' }}>
+                                    {imagePreview ? 'Click to change photo' : 'Add Photo'}
+                                </p>
                             </div>
+
+                            {/* AI Pet Analyzer */}
+                            <VisionPetAnalyzer
+                                imageUri={imagePreview}
+                                onAnalysisComplete={handleAIAnalysisComplete}
+                                disabled={isSubmitting}
+                            />
+
+                            {/* AI Status Göstergesi */}
+                            {aiStatus && (
+                                <div style={{
+                                    marginTop: '20px',
+                                    padding: '15px',
+                                    backgroundColor: '#fff3e0',
+                                    border: `1px solid ${Colors.PRIMARY}`,
+                                    borderRadius: '8px',
+                                    width: '100%'
+                                }}>
+                                    <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        marginBottom: '10px',
+                                        gap: '10px'
+                                    }}>
+                                        <span style={{ fontSize: '20px' }}>✅</span>
+                                        <h4 style={{
+                                            margin: 0,
+                                            fontSize: '16px',
+                                            fontWeight: 'bold',
+                                            color: Colors.PRIMARY
+                                        }}>AI Analiz Sonucu</h4>
+                                    </div>
+                                    <p style={{ margin: '5px 0', fontSize: '14px', color: '#e65100' }}>
+                                        🐾 Tespit: <strong>{aiStatus.breed}</strong>
+                                    </p>
+                                    <p style={{ margin: '5px 0', fontSize: '14px', color: '#e65100' }}>
+                                        📊 Güven: <strong>{Math.round(aiStatus.confidence * 100)}%</strong>
+                                    </p>
+                                    <p style={{ margin: '5px 0', fontSize: '14px', color: '#e65100' }}>
+                                        ⏰ Analiz: {aiStatus.timestamp}
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         {/* Right Side - Form Fields */}
-                        <div style={{ flex: '1.5', minWidth: '300px' }}>
-                            <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(2, 1fr)',
-                                gap: '20px',
-                                marginBottom: '30px'
-                            }}>
-                                <div className="form-group">
-                                    <label style={labelStyle}>Pet Name *</label>
+                        <div style={{
+                            flex: '1',
+                            minWidth: '400px'
+                        }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
+                                        Pet Name *
+                                    </label>
                                     <input
                                         type="text"
                                         name="name"
                                         value={formData.name || ''}
                                         onChange={handleInputChange}
-                                        required
-                                        style={inputStyle}
+                                        style={{
+                                            width: '100%',
+                                            padding: '15px',
+                                            borderRadius: '8px',
+                                            border: '1px solid #ddd',
+                                            fontSize: '16px'
+                                        }}
+                                        placeholder="Enter pet name"
                                     />
                                 </div>
 
-                                <div className="form-group">
-                                    <label style={labelStyle}>Pet Category *</label>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
+                                        Pet Category *
+                                    </label>
                                     <select
                                         name="category"
-                                        value={formData.category || 'Dogs'}
+                                        value={formData.category}
                                         onChange={handleInputChange}
-                                        required
-                                        style={inputStyle}
+                                        style={{
+                                            width: '100%',
+                                            padding: '15px',
+                                            borderRadius: '8px',
+                                            border: '1px solid #ddd',
+                                            fontSize: '16px'
+                                        }}
                                     >
-                                        {categoryList.map((category) => (
-                                            <option key={category.id} value={category.name}>
-                                                {category.name}
-                                            </option>
+                                        {categoryList.map((category, index) => (
+                                            <option key={index} value={category.name}>{category.name}</option>
                                         ))}
                                     </select>
                                 </div>
 
-                                <div className="form-group">
-                                    <label style={labelStyle}>Breed *</label>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
+                                        Breed *
+                                    </label>
                                     <input
                                         type="text"
                                         name="breed"
                                         value={formData.breed || ''}
                                         onChange={handleInputChange}
-                                        required
-                                        style={inputStyle}
+                                        style={{
+                                            width: '100%',
+                                            padding: '15px',
+                                            borderRadius: '8px',
+                                            border: '1px solid #ddd',
+                                            fontSize: '16px'
+                                        }}
+                                        placeholder="AI tarafından otomatik doldurulur"
                                     />
                                 </div>
 
-                                <div className="form-group">
-                                    <label style={labelStyle}>Age *</label>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
+                                        Age *
+                                    </label>
                                     <input
                                         type="number"
                                         name="age"
                                         value={formData.age || ''}
                                         onChange={handleInputChange}
-                                        required
-                                        style={inputStyle}
+                                        style={{
+                                            width: '100%',
+                                            padding: '15px',
+                                            borderRadius: '8px',
+                                            border: '1px solid #ddd',
+                                            fontSize: '16px'
+                                        }}
+                                        placeholder="AI tahmini yaş"
                                     />
                                 </div>
 
-                                <div className="form-group">
-                                    <label style={labelStyle}>Gender *</label>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
+                                        Gender *
+                                    </label>
                                     <select
                                         name="sex"
-                                        value={formData.sex || 'Male'}
+                                        value={formData.sex}
                                         onChange={handleInputChange}
-                                        required
-                                        style={inputStyle}
+                                        style={{
+                                            width: '100%',
+                                            padding: '15px',
+                                            borderRadius: '8px',
+                                            border: '1px solid #ddd',
+                                            fontSize: '16px'
+                                        }}
                                     >
                                         <option value="Male">Male</option>
                                         <option value="Female">Female</option>
                                     </select>
                                 </div>
 
-                                <div className="form-group">
-                                    <label style={labelStyle}>Weight (kg) *</label>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
+                                        Weight (kg) *
+                                    </label>
                                     <input
                                         type="number"
                                         name="weight"
                                         value={formData.weight || ''}
                                         onChange={handleInputChange}
-                                        required
-                                        style={inputStyle}
+                                        style={{
+                                            width: '100%',
+                                            padding: '15px',
+                                            borderRadius: '8px',
+                                            border: '1px solid #ddd',
+                                            fontSize: '16px'
+                                        }}
+                                        placeholder="Kilogram (kg)"
                                     />
                                 </div>
-                            </div>
 
-                            <div className="form-group" style={{ marginBottom: '20px' }}>
-                                <label style={labelStyle}>Address *</label>
-                                <input
-                                    type="text"
-                                    name="address"
-                                    value={formData.address || ''}
-                                    onChange={handleInputChange}
-                                    required
-                                    style={inputStyle}
-                                />
-                            </div>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
+                                        Address *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="address"
+                                        value={formData.address || ''}
+                                        onChange={handleInputChange}
+                                        style={{
+                                            width: '100%',
+                                            padding: '15px',
+                                            borderRadius: '8px',
+                                            border: '1px solid #ddd',
+                                            fontSize: '16px'
+                                        }}
+                                        placeholder="Pet'in bulunduğu adres"
+                                    />
+                                </div>
 
-                            <div className="form-group" style={{ marginBottom: '30px' }}>
-                                <label style={labelStyle}>About *</label>
-                                <textarea
-                                    name="about"
-                                    value={formData.about || ''}
-                                    onChange={handleInputChange}
-                                    rows="5"
-                                    required
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#333' }}>
+                                        About *
+                                    </label>
+                                    <textarea
+                                        name="about"
+                                        value={formData.about || ''}
+                                        onChange={handleInputChange}
+                                        rows={5}
+                                        style={{
+                                            width: '100%',
+                                            padding: '15px',
+                                            borderRadius: '8px',
+                                            border: '1px solid #ddd',
+                                            fontSize: '16px',
+                                            resize: 'vertical'
+                                        }}
+                                        placeholder="AI tarafından otomatik oluşturulan açıklama..."
+                                    />
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    disabled={isSubmitting}
                                     style={{
-                                        ...inputStyle,
-                                        minHeight: '120px',
-                                        resize: 'vertical'
+                                        backgroundColor: isSubmitting ? '#ccc' : Colors.PRIMARY,
+                                        color: 'white',
+                                        padding: '15px 30px',
+                                        borderRadius: '8px',
+                                        border: 'none',
+                                        fontSize: '18px',
+                                        fontWeight: 'bold',
+                                        cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '10px'
                                     }}
-                                ></textarea>
+                                >
+                                    {isSubmitting ? (
+                                        <>
+                                            <span>⏳</span>
+                                            <span>Uploading...</span>
+                                        </>
+                                    ) : (
+                                        'Submit'
+                                    )}
+                                </button>
                             </div>
                         </div>
                     </div>
-
-                    <button
-                        type="submit"
-                        className="submit-button"
-                        disabled={isSubmitting}
-                        style={{
-                            backgroundColor: Colors.PRIMARY,
-                            color: 'white',
-                            padding: '14px',
-                            borderRadius: '8px',
-                            border: 'none',
-                            cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                            opacity: isSubmitting ? 0.7 : 1,
-                            fontSize: '16px',
-                            fontWeight: '600',
-                            width: '100%',
-                            marginTop: '20px',
-                            transition: 'all 0.2s ease'
-                        }}
-                    >
-                        {isSubmitting ? 'Submitting...' : 'Add Pet for Adoption'}
-                    </button>
                 </form>
             </div>
         </div>
     );
-};
-
-// Styles
-const labelStyle = {
-    display: 'block',
-    marginBottom: '8px',
-    fontWeight: '500',
-    color: '#333'
-};
-
-const inputStyle = {
-    width: '100%',
-    padding: '12px',
-    borderRadius: '8px',
-    border: '1px solid #ddd',
-    boxSizing: 'border-box',
-    fontSize: '16px'
 };
 
 export default AddPetForm; 

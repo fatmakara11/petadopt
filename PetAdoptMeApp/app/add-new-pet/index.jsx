@@ -21,8 +21,10 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { getAvailableApis, validateApiKeys } from '../../config/apiKeys';
 import { db, storage } from '../../config/FirabaseConfig';
 import Colors from '../../constants/Colors';
+import VisionPetAnalyzer from '../components/AI/VisionPetAnalyzer';
 
 function generateRandomId(length = 16) {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -43,6 +45,7 @@ export default function AddNewPet() {
     const [image, setImage] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
     const [isImageLoading, setIsImageLoading] = useState(false);
+    const [aiStatus, setAiStatus] = useState(null);
 
     const handleInputChange = (fieldName, FieldValue) => {
         setFormData(prev => ({
@@ -51,9 +54,49 @@ export default function AddNewPet() {
         }));
     };
 
+    // AI analiz sonuçlarını işleyen gelişmiş fonksiyon
+    const handleAIAnalysisComplete = (aiFormData) => {
+        console.log('🎯 AI Analiz sonucu alındı:', aiFormData);
+
+        setFormData(prev => ({
+            ...prev,
+            ...aiFormData
+        }));
+
+        // Kategori seçimini güncelle
+        if (aiFormData.category) {
+            setSelectedCategory(aiFormData.category);
+        }
+
+        // AI durumunu güncelle
+        setAiStatus({
+            success: true,
+            breed: aiFormData.breed,
+            confidence: aiFormData.confidence,
+            timestamp: new Date().toLocaleTimeString('tr-TR')
+        });
+
+        ToastAndroid.show(`✅ ${aiFormData.breed || 'Hayvan'} tespit edildi! (${Math.round((aiFormData.confidence || 0.8) * 100)}% güven)`, ToastAndroid.LONG);
+    };
+
     useEffect(() => {
         GetCategories();
+        checkApiStatus();
     }, []);
+
+    // API durumunu kontrol et
+    const checkApiStatus = () => {
+        const validation = validateApiKeys();
+        const availableApis = getAvailableApis();
+
+        console.log('🔑 Available APIs:', availableApis);
+
+        if (validation.google) {
+            console.log('✅ Google Vision API kullanılabilir');
+        } else {
+            console.log('⚠️ Google Vision API bulunamadı, Local AI kullanılacak');
+        }
+    };
 
     const GetCategories = async () => {
         try {
@@ -261,9 +304,39 @@ export default function AddNewPet() {
                     )}
                 </TouchableOpacity>
 
+                {/* AI Pet Analyzer */}
+                <VisionPetAnalyzer
+                    imageUri={image}
+                    onAnalysisComplete={handleAIAnalysisComplete}
+                    disabled={isUploading || isImageLoading}
+                />
+
+                {/* AI Status Göstergesi */}
+                {aiStatus && (
+                    <View style={styles.aiStatusContainer}>
+                        <View style={styles.aiStatusHeader}>
+                            <Ionicons name="checkmark-circle" size={20} color={Colors.PRIMARY} />
+                            <Text style={styles.aiStatusTitle}>Google Vision AI Sonucu</Text>
+                        </View>
+                        <Text style={styles.aiStatusText}>
+                            🐾 Tespit: <Text style={styles.aiStatusBreed}>{aiStatus.breed}</Text>
+                        </Text>
+                        <Text style={styles.aiStatusText}>
+                            📊 Güven: <Text style={styles.aiStatusConfidence}>{Math.round(aiStatus.confidence * 100)}%</Text>
+                        </Text>
+                        <Text style={styles.aiStatusText}>
+                            ⏰ Analiz: {aiStatus.timestamp}
+                        </Text>
+                    </View>
+                )}
+
                 <View style={styles.inputContainer}>
                     <Text style={styles.label}>Pet Name *</Text>
-                    <TextInput style={styles.input} onChangeText={(value) => handleInputChange('name', value)} />
+                    <TextInput
+                        style={styles.input}
+                        value={formData.name || ''}
+                        onChangeText={(value) => handleInputChange('name', value)}
+                    />
                 </View>
 
                 <View style={styles.inputContainer}>
@@ -271,6 +344,7 @@ export default function AddNewPet() {
                     <Picker
                         selectedValue={selectedCategory}
                         style={styles.input}
+                        itemStyle={{ color: Colors.PRIMARY }}
                         onValueChange={(itemValue) => {
                             setSelectedCategory(itemValue);
                             handleInputChange('category', itemValue);
@@ -284,17 +358,29 @@ export default function AddNewPet() {
 
                 <View style={styles.inputContainer}>
                     <Text style={styles.label}>Breed *</Text>
-                    <TextInput style={styles.input} onChangeText={(value) => handleInputChange('breed', value)} />
+                    <TextInput
+                        style={styles.input}
+                        value={formData.breed || ''}
+                        onChangeText={(value) => handleInputChange('breed', value)}
+                        placeholder="AI tarafından otomatik doldurulur"
+                    />
                 </View>
 
                 <View style={styles.inputContainer}>
                     <Text style={styles.label}>Age *</Text>
-                    <TextInput style={styles.input} keyboardType='numeric' onChangeText={(value) => handleInputChange('age', value)} />
+                    <TextInput
+                        style={styles.input}
+                        keyboardType='numeric'
+                        value={formData.age || ''}
+                        onChangeText={(value) => handleInputChange('age', value)}
+                        placeholder="AI tahmini yaş"
+                    />
                 </View>
 
                 <View style={styles.inputContainer}>
                     <Text style={styles.label}>Gender *</Text>
                     <Picker
+                        itemStyle={{ color: Colors.PRIMARY }}
                         selectedValue={gender}
                         style={styles.input}
                         onValueChange={(itemValue) => {
@@ -309,12 +395,23 @@ export default function AddNewPet() {
 
                 <View style={styles.inputContainer}>
                     <Text style={styles.label}>Weight *</Text>
-                    <TextInput style={styles.input} keyboardType='numeric' onChangeText={(value) => handleInputChange('weight', value)} />
+                    <TextInput
+                        style={styles.input}
+                        keyboardType='numeric'
+                        value={formData.weight || ''}
+                        onChangeText={(value) => handleInputChange('weight', value)}
+                        placeholder="Kilogram (kg)"
+                    />
                 </View>
 
                 <View style={styles.inputContainer}>
                     <Text style={styles.label}>Address *</Text>
-                    <TextInput style={styles.input} onChangeText={(value) => handleInputChange('address', value)} />
+                    <TextInput
+                        style={styles.input}
+                        value={formData.address || ''}
+                        onChangeText={(value) => handleInputChange('address', value)}
+                        placeholder="Pet'in bulunduğu adres"
+                    />
                 </View>
 
                 <View style={styles.inputContainer}>
@@ -323,7 +420,9 @@ export default function AddNewPet() {
                         style={[styles.input, { height: 100 }]}
                         numberOfLines={5}
                         multiline={true}
+                        value={formData.about || ''}
                         onChangeText={(value) => handleInputChange('about', value)}
+                        placeholder="AI tarafından otomatik oluşturulan açıklama..."
                     />
                 </View>
 
@@ -423,7 +522,7 @@ const styles = StyleSheet.create({
     label: {
         marginBottom: 5,
         fontFamily: 'outfit',
-        fontSize: 14
+        fontSize: 14,
     },
     button: {
         padding: 15,
@@ -455,5 +554,36 @@ const styles = StyleSheet.create({
         color: Colors.PRIMARY,
         textAlign: 'center',
         fontSize: 14
-    }
+    },
+    aiStatusContainer: {
+        marginVertical: 20,
+        padding: 15,
+        backgroundColor: Colors.WHITE,
+        borderRadius: 7,
+        borderWidth: 1,
+        borderColor: Colors.GRAY,
+    },
+    aiStatusHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 10,
+    },
+    aiStatusTitle: {
+        fontFamily: 'outfit-medium',
+        fontSize: 16,
+        marginLeft: 10,
+    },
+    aiStatusText: {
+        fontFamily: 'outfit',
+        fontSize: 14,
+        marginBottom: 5,
+    },
+    aiStatusBreed: {
+        fontFamily: 'outfit-medium',
+        color: Colors.PRIMARY,
+    },
+    aiStatusConfidence: {
+        fontFamily: 'outfit-medium',
+        color: Colors.PRIMARY,
+    },
 });

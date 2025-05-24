@@ -5,6 +5,8 @@ import Colors from '../../../constants/Colors';
 import MarkFav from '../MarkFav';
 
 export default function PetInfo({ pet }) {
+
+    console.log(pet)
     return (
         <View>
             <Image
